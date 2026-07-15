@@ -282,7 +282,7 @@
 <header>
   <h1>⬡ Catan Tracker</h1>
   <div class="subtitle" id="metaLine">move 0 · new game</div>
-  <div class="subtitle" style="opacity:0.55; margin-top:2px;">build v3</div>
+  <div class="subtitle" style="opacity:0.55; margin-top:2px;">build v5</div>
 </header>
 
 <div class="players" id="playerTabs"></div>
@@ -296,17 +296,22 @@
   <div class="counters" id="resourceCounters"></div>
   <div class="vp-row">
     <span>Victory Points</span>
-    <div style="display:flex;align-items:center;gap:10px;">
-      <button onclick="adjustVP(-1)" style="all:unset;width:26px;height:26px;background:#f4ecd822;border-radius:6px;text-align:center;line-height:26px;cursor:pointer;">–</button>
-      <span class="val" id="vpVal">0</span>
-      <button onclick="adjustVP(1)" style="all:unset;width:26px;height:26px;background:#f4ecd822;border-radius:6px;text-align:center;line-height:26px;cursor:pointer;">+</button>
-    </div>
+    <span class="val" id="vpVal">0</span>
+  </div>
+  <div style="font-size:0.72rem;color:#b8a888;margin-top:2px;" id="vpBreakdown"></div>
+  <div class="bookmarks" style="margin-top:10px;">
+    <button class="bm-btn" onclick="toggleBonus('longestRoad')">🛤️ Longest Road<span id="lrBadge"></span></button>
+    <button class="bm-btn" onclick="toggleBonus('largestArmy')">⚔️ Largest Army<span id="laBadge"></span></button>
   </div>
 </div>
 
 <div class="panel" id="devPanel">
   <h2>Dev Cards — <span id="activePlayerName2">P1</span></h2>
   <div class="counters" id="devCounters"></div>
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-top:10px;padding-top:10px;border-top:1px solid #f4ecd822;">
+    <span style="font-size:0.75rem;color:#b8a888;" id="deckRemaining">25 cards left in deck</span>
+    <button onclick="drawDevCard()" style="all:unset;background:var(--accent);color:#2a1f14;padding:8px 14px;border-radius:7px;font-weight:600;font-size:0.82rem;cursor:pointer;">🎴 Draw</button>
+  </div>
 </div>
 
 <div class="panel">
@@ -367,12 +372,14 @@ function freshState(numPlayers){
   }
   const board = generateBoard();
   return {
-    schemaVersion:1,
+    schemaVersion:2,
     game:'catan',
     createdAt:new Date().toISOString(),
     board,
     robberHexId: board.hexes.find(h=>h.resource==='desert').id,
     players,
+    devDeck: {knight:14, victoryPoint:5, roadBuilding:2, yearOfPlenty:2, monopoly:2},
+    bonuses: {longestRoad:null, largestArmy:null},
     log:[],
     bookmarks: Object.fromEntries(VIEWERS.map(v=>[v,0])),
     nextMoveNum:1
@@ -487,11 +494,11 @@ function renderBoard(){
       pts.push((hex.cx+HEX_SIZE*Math.cos(ang)).toFixed(1)+','+(hex.cy+HEX_SIZE*Math.sin(ang)).toFixed(1));
     }
     const fill = RESOURCE_META[hex.resource] ? RESOURCE_META[hex.resource].color : '#ccc';
-    html += `<polygon class="hex-fill" points="${pts.join(' ')}" fill="${fill}"></polygon>`;
+    html += `<polygon class="hex-fill" points="${pts.join(' ')}" fill="${fill}" onclick="onHexTap(event,'${hex.id}')"></polygon>`;
     if(hex.number){
       const isRed = hex.number===6 || hex.number===8;
       const pipCount = ({2:1,3:2,4:3,5:4,6:5,8:5,9:4,10:3,11:2,12:1})[hex.number];
-      html += `<g class="token" onclick="onHexTap('${hex.id}')">
+      html += `<g class="token" onclick="onHexTap(event,'${hex.id}')">
         <circle class="token-bg" cx="${hex.cx}" cy="${hex.cy}" r="13"></circle>
         <text class="token-num ${isRed?'red':''}" x="${hex.cx}" y="${hex.cy+5}" font-size="14" text-anchor="middle">${hex.number}</text>
       </g>`;
@@ -501,10 +508,10 @@ function renderBoard(){
         html += `<circle class="pip" cx="${pipStartX+p*5}" cy="${pipY}" r="1"></circle>`;
       }
     } else {
-      html += `<g class="token" onclick="onHexTap('${hex.id}')"><circle class="token-bg" cx="${hex.cx}" cy="${hex.cy}" r="13" opacity="0.5"></circle></g>`;
+      html += `<g class="token" onclick="onHexTap(event,'${hex.id}')"><circle class="token-bg" cx="${hex.cx}" cy="${hex.cy}" r="13" opacity="0.5"></circle></g>`;
     }
     if(hex.id === state.robberHexId){
-      html += `<g class="robber" onclick="onHexTap('${hex.id}')">
+      html += `<g class="robber" onclick="onHexTap(event,'${hex.id}')">
         <ellipse cx="${hex.cx}" cy="${hex.cy-2}" rx="5" ry="7"></ellipse>
         <circle cx="${hex.cx}" cy="${hex.cy-9}" r="3.2"></circle>
       </g>`;
@@ -573,7 +580,10 @@ function placeBuilding(vid, type){
     pushLog(`${p.id} placed ${type} at ${vid}`, p.id);
   }
   hidePopup();
+  recalcAllVP();
   renderBoard();
+  renderResourceCounters();
+  renderPlayerTabs();
 }
 
 function onEdgeTap(evt, eid){
@@ -597,10 +607,11 @@ function placeRoad(eid, playerIdx){
   renderBoard();
 }
 
-function onHexTap(hid){
+function onHexTap(evt, hid){
+  evt.stopPropagation();
   const hex = state.board.hexes.find(x=>x.id===hid);
   const items = [{label:'Move robber here', action:`moveRobber('${hid}')`}];
-  showPopup(window.innerWidth/2-85, window.innerHeight/2-40, items);
+  showPopup(evt.clientX, evt.clientY, items);
 }
 function moveRobber(hid){
   const hex = state.board.hexes.find(x=>x.id===hid);
@@ -641,6 +652,16 @@ function renderResourceCounters(){
   document.getElementById('activePlayerName').textContent = p.id;
   document.getElementById('activePlayerName2').textContent = p.id;
   document.getElementById('vpVal').textContent = p.vp;
+  const b = p._vpBreakdown || {settlements:0,cities:0,vpCards:0,longestRoad:false,largestArmy:false};
+  const parts = [];
+  if(b.settlements) parts.push(`${b.settlements} settlement${b.settlements>1?'s':''}`);
+  if(b.cities) parts.push(`${b.cities} cit${b.cities>1?'ies':'y'}`);
+  if(b.vpCards) parts.push(`${b.vpCards} VP card${b.vpCards>1?'s':''}`);
+  if(b.longestRoad) parts.push('Longest Road');
+  if(b.largestArmy) parts.push('Largest Army');
+  document.getElementById('vpBreakdown').textContent = parts.length ? parts.join(' + ') : 'no points yet';
+  document.getElementById('lrBadge').textContent = state.bonuses.longestRoad!==null ? ` (${state.players[state.bonuses.longestRoad].id})` : '';
+  document.getElementById('laBadge').textContent = state.bonuses.largestArmy!==null ? ` (${state.players[state.bonuses.largestArmy].id})` : '';
   document.getElementById('resourceCounters').innerHTML = RESOURCE_TYPES.map(rt=>`
     <div class="counter">
       <div class="icon">${RESOURCE_META[rt].icon}</div>
@@ -670,18 +691,75 @@ function adjustResource(rt, delta){
   pushLog(`${p.id} ${delta>0?'+':''}${delta} ${rt}`, p.id);
   renderResourceCounters();
 }
+function deckTotal(){
+  return Object.values(state.devDeck).reduce((a,b)=>a+b,0);
+}
+function renderDeckRemaining(){
+  document.getElementById('deckRemaining').textContent = `${deckTotal()} card${deckTotal()!==1?'s':''} left in deck`;
+}
+function drawDevCard(){
+  const total = deckTotal();
+  if(total===0){ showToast('Dev card deck is empty'); return; }
+  let roll = Math.floor(Math.random()*total);
+  let picked = null;
+  for(const type of Object.keys(state.devDeck)){
+    if(roll < state.devDeck[type]){ picked = type; break; }
+    roll -= state.devDeck[type];
+  }
+  state.devDeck[picked]--;
+  const p = state.players[activePlayer];
+  p.devCards[picked] = (p.devCards[picked]||0)+1;
+  pushLog(`${p.id} drew a dev card: ${DEV_META[picked].label} (${deckTotal()} left)`, p.id);
+  if(picked==='victoryPoint') recalcAllVP();
+  renderResourceCounters();
+  renderPlayerTabs();
+  renderDeckRemaining();
+}
+
 function adjustDev(dt, delta){
   const p = state.players[activePlayer];
   p.devCards[dt] = Math.max(0, p.devCards[dt]+delta);
   pushLog(`${p.id} ${delta>0?'+':''}${delta} ${DEV_META[dt].label} card`, p.id);
-  renderResourceCounters();
-}
-function adjustVP(delta){
-  const p = state.players[activePlayer];
-  p.vp = Math.max(0, p.vp+delta);
-  pushLog(`${p.id} VP ${delta>0?'+':''}${delta} (now ${p.vp})`, p.id);
+  if(dt==='victoryPoint') recalcAllVP();
   renderResourceCounters();
   renderPlayerTabs();
+}
+/* ===================== VICTORY POINTS (auto-calculated) ===================== */
+function countBuildings(pIdx){
+  let settlements=0, cities=0;
+  state.board.vertices.forEach(v=>{
+    if(v.building && v.building.player===pIdx){
+      if(v.building.type==='settlement') settlements++;
+      else if(v.building.type==='city') cities++;
+    }
+  });
+  return {settlements, cities};
+}
+function recalcVP(pIdx){
+  const p = state.players[pIdx];
+  const {settlements, cities} = countBuildings(pIdx);
+  let vp = settlements + cities*2 + (p.devCards.victoryPoint||0);
+  if(state.bonuses.longestRoad===pIdx) vp += 2;
+  if(state.bonuses.largestArmy===pIdx) vp += 2;
+  p.vp = vp;
+  p._vpBreakdown = {settlements, cities, vpCards:p.devCards.victoryPoint||0,
+    longestRoad: state.bonuses.longestRoad===pIdx, largestArmy: state.bonuses.largestArmy===pIdx};
+}
+function recalcAllVP(){ state.players.forEach((_,i)=>recalcVP(i)); }
+
+function toggleBonus(kind){
+  const p = state.players[activePlayer];
+  if(state.bonuses[kind]===activePlayer){
+    state.bonuses[kind] = null;
+    pushLog(`${p.id} lost ${kind==='longestRoad'?'Longest Road':'Largest Army'}`, p.id);
+  } else {
+    const prevHolder = state.bonuses[kind];
+    state.bonuses[kind] = activePlayer;
+    const label = kind==='longestRoad'?'Longest Road':'Largest Army';
+    pushLog(`${p.id} took ${label}${prevHolder!==null?` from ${state.players[prevHolder].id}`:''}`, p.id);
+  }
+  recalcAllVP();
+  renderAll();
 }
 
 /* ===================== RENDER: LOG + BOOKMARKS ===================== */
@@ -752,6 +830,8 @@ document.getElementById('importFile').addEventListener('change', function(e){
     try{
       const loaded = JSON.parse(evt.target.result);
       if(loaded.game!=='catan') throw new Error('Not a catan state file');
+      if(!loaded.devDeck) loaded.devDeck = {knight:14, victoryPoint:5, roadBuilding:2, yearOfPlenty:2, monopoly:2};
+      if(!loaded.bonuses) loaded.bonuses = {longestRoad:null, largestArmy:null};
       state = loaded;
       activePlayer = 0;
       renderAll();
@@ -789,12 +869,14 @@ function autosave(){
 
 /* ===================== INIT ===================== */
 function renderAll(){
+  recalcAllVP();
   renderPlayerTabs();
   renderBoard();
   renderResourceCounters();
   renderLog();
   renderBookmarks();
   renderMeta();
+  renderDeckRemaining();
 }
 
 (function init(){
