@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>Catan Tracker</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -279,6 +282,7 @@
 <header>
   <h1>⬡ Catan Tracker</h1>
   <div class="subtitle" id="metaLine">move 0 · new game</div>
+  <div class="subtitle" style="opacity:0.55; margin-top:2px;">build v3</div>
 </header>
 
 <div class="players" id="playerTabs"></div>
@@ -511,7 +515,7 @@ function renderBoard(){
   edges.forEach(e=>{
     const color = (e.road !== null && e.road !== undefined) ? state.players[e.road]?.color : null;
     html += `<line class="edge ${e.road!==null?'road':''}" x1="${e.x1}" y1="${e.y1}" x2="${e.x2}" y2="${e.y2}"
-      ${color?`stroke="${color}"`:''} onclick="onEdgeTap(event,'${e.id}')"></line>`;
+      ${color?`style="stroke:${color};"`:''} onclick="onEdgeTap(event,'${e.id}')"></line>`;
   });
 
   // vertices (settlements/cities)
@@ -521,7 +525,7 @@ function renderBoard(){
       const col = state.players[v.building.player]?.color || '#000';
       cls += ' '+v.building.type;
       r = v.building.type==='city' ? 8 : 6;
-      extra = `fill="${col}"`;
+      extra = `style="fill:${col};"`;
     }
     html += `<circle class="${cls}" cx="${v.x}" cy="${v.y}" r="${r}" ${extra} onclick="onVertexTap(event,'${v.id}')"></circle>`;
   });
