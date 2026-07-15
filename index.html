@@ -1,0 +1,807 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Catan Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --table:#2b2119;
+    --parchment:#f4ecd8;
+    --parchment-dim:#e8dcc0;
+    --ink:#2a1f14;
+    --ink-soft:#5c4d3a;
+    --line:#c9b98f;
+    --wood:#3f6b3f;
+    --brick:#b5533c;
+    --sheep:#93b565;
+    --wheat:#d4a72c;
+    --ore:#7c828c;
+    --desert:#dcc48f;
+    --accent:#d4a72c;
+    --p1:#c0392b;
+    --p2:#2f6fb0;
+    --p3:#d9822b;
+    --p4:#e8e2d0;
+    --radius:10px;
+  }
+  *{box-sizing:border-box;}
+  @media (prefers-reduced-motion: reduce){ *{transition:none!important; animation:none!important;} }
+  body{
+    margin:0;
+    background:var(--table);
+    background-image:radial-gradient(circle at 50% 0%, #3a2c1e, #201811 80%);
+    color:var(--parchment);
+    font-family:'Inter',sans-serif;
+    -webkit-tap-highlight-color:transparent;
+    padding-bottom:40px;
+  }
+  header{
+    padding:18px 16px 10px;
+    text-align:center;
+  }
+  h1{
+    font-family:'Fraunces',serif;
+    font-weight:700;
+    font-size:1.7rem;
+    letter-spacing:0.02em;
+    margin:0;
+    color:var(--parchment);
+  }
+  .subtitle{
+    font-size:0.78rem;
+    color:#b8a888;
+    margin-top:4px;
+    font-family:'IBM Plex Mono',monospace;
+    letter-spacing:0.03em;
+  }
+
+  /* Player tabs */
+  .players{
+    display:flex;
+    gap:8px;
+    padding:12px 16px 4px;
+    overflow-x:auto;
+  }
+  .player-tab{
+    flex:0 0 auto;
+    display:flex;
+    align-items:center;
+    gap:6px;
+    padding:8px 12px;
+    border-radius:999px;
+    background:#00000030;
+    border:2px solid transparent;
+    font-size:0.85rem;
+    font-weight:600;
+    cursor:pointer;
+    white-space:nowrap;
+  }
+  .player-tab.active{
+    border-color:var(--accent);
+    background:#00000055;
+  }
+  .swatch{
+    width:12px;height:12px;border-radius:50%;
+    box-shadow:0 0 0 1px #00000055 inset;
+  }
+  .player-tab .vp{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:0.75rem;
+    color:#c9b98f;
+  }
+
+  /* Board */
+  .board-wrap{
+    margin:10px 12px;
+    background:var(--parchment);
+    border-radius:var(--radius);
+    padding:10px;
+    box-shadow:0 6px 20px #00000055, inset 0 0 0 1px #0000001a;
+  }
+  svg{ width:100%; height:auto; display:block; touch-action:manipulation; }
+  .hex-fill{ stroke:#2a1f1440; stroke-width:1.5; }
+  .hex-label{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:9px;
+    fill:#2a1f1470;
+    pointer-events:none;
+  }
+  .token{ cursor:pointer; }
+  .token-bg{ fill:#f4ecd8; stroke:#2a1f14; stroke-width:1.3; }
+  .token-num{ font-family:'Fraunces',serif; font-weight:700; fill:#2a1f14; }
+  .token-num.red{ fill:#b5342a; }
+  .pip{ fill:#2a1f14; }
+  .robber{ fill:#2a1f14; stroke:#f4ecd8; stroke-width:1; cursor:pointer; }
+
+  .vertex{
+    fill:#2a1f1418;
+    stroke:#2a1f1430;
+    stroke-width:1;
+    cursor:pointer;
+    transition:r 0.1s ease;
+  }
+  .vertex:active, .vertex.tapped{ r:9; }
+  .vertex.settlement{ stroke:#2a1f14; stroke-width:1.5; }
+  .vertex.city{ stroke:#2a1f14; stroke-width:2; }
+
+  .edge{
+    stroke:#2a1f1422;
+    stroke-width:5;
+    cursor:pointer;
+    stroke-linecap:round;
+  }
+  .edge.road{ stroke-width:6; }
+
+  /* Popup menu for vertex/edge taps */
+  .popup{
+    position:fixed;
+    z-index:50;
+    background:var(--parchment);
+    border-radius:8px;
+    box-shadow:0 8px 24px #00000066;
+    padding:6px;
+    display:none;
+    flex-direction:column;
+    gap:4px;
+    min-width:170px;
+  }
+  .popup.show{ display:flex; }
+  .popup button{
+    all:unset;
+    padding:9px 12px;
+    border-radius:6px;
+    font-family:'Inter',sans-serif;
+    font-size:0.85rem;
+    font-weight:600;
+    color:var(--ink);
+    cursor:pointer;
+  }
+  .popup button:active{ background:#2a1f1414; }
+  .popup .cancel{ color:#a03a2c; }
+
+  /* Panels */
+  .panel{
+    margin:14px 12px;
+    background:#00000030;
+    border-radius:var(--radius);
+    padding:12px 14px;
+  }
+  .panel h2{
+    font-family:'Fraunces',serif;
+    font-size:1.05rem;
+    margin:0 0 10px;
+    color:var(--accent);
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+  }
+  .counters{
+    display:grid;
+    grid-template-columns:repeat(5,1fr);
+    gap:6px;
+  }
+  .counter{
+    background:#00000030;
+    border-radius:8px;
+    padding:6px 4px;
+    text-align:center;
+  }
+  .counter .icon{ font-size:1.1rem; }
+  .counter .label{ font-size:0.62rem; color:#b8a888; text-transform:uppercase; letter-spacing:0.03em; margin-top:1px;}
+  .counter .val{ font-family:'IBM Plex Mono',monospace; font-weight:500; font-size:1rem; margin:3px 0; }
+  .counter .btns{ display:flex; gap:3px; justify-content:center; }
+  .counter button{
+    all:unset;
+    width:22px; height:22px;
+    background:#f4ecd822;
+    border-radius:5px;
+    text-align:center;
+    line-height:22px;
+    font-size:0.85rem;
+    cursor:pointer;
+  }
+  .counter button:active{ background:#f4ecd844; }
+
+  .vp-row{
+    display:flex; align-items:center; justify-content:space-between;
+    margin-top:10px; padding-top:10px; border-top:1px solid #f4ecd822;
+  }
+  .vp-row .val{ font-family:'Fraunces',serif; font-weight:700; font-size:1.4rem; color:var(--accent); }
+
+  /* Log */
+  .log-list{
+    max-height:220px;
+    overflow-y:auto;
+    font-family:'IBM Plex Mono',monospace;
+    font-size:0.78rem;
+    line-height:1.55;
+    color:#e6dcc4;
+  }
+  .log-list .entry{ padding:2px 0; border-bottom:1px dashed #f4ecd814; }
+  .log-list .mv{ color:#8a7a5c; }
+  .empty-log{ color:#8a7a5c; font-style:italic; }
+
+  .bookmarks{
+    display:flex; flex-wrap:wrap; gap:6px; margin-top:10px;
+  }
+  .bm-btn{
+    all:unset;
+    padding:7px 10px;
+    background:#f4ecd818;
+    border-radius:6px;
+    font-size:0.78rem;
+    display:flex; align-items:center; gap:6px;
+    cursor:pointer;
+  }
+  .bm-btn:active{ background:#f4ecd830; }
+  .bm-count{
+    background:var(--accent); color:#2a1f14;
+    border-radius:999px; padding:1px 6px; font-size:0.68rem; font-weight:700;
+  }
+
+  /* Actions */
+  .actions{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:8px;
+    margin:14px 12px 4px;
+  }
+  .actions button{
+    all:unset;
+    text-align:center;
+    padding:12px;
+    border-radius:8px;
+    font-weight:600;
+    font-size:0.85rem;
+    cursor:pointer;
+  }
+  .btn-primary{ background:var(--accent); color:#2a1f14; }
+  .btn-secondary{ background:#f4ecd822; color:var(--parchment); }
+  .btn-danger{ background:#7a2c22; color:var(--parchment); grid-column:1/-1; }
+  #importFile{ display:none; }
+
+  .toast{
+    position:fixed; bottom:20px; left:50%; transform:translateX(-50%);
+    background:#f4ecd8; color:#2a1f14; padding:10px 16px; border-radius:8px;
+    font-size:0.85rem; font-weight:600; box-shadow:0 6px 20px #00000066;
+    opacity:0; pointer-events:none; transition:opacity 0.25s ease;
+    z-index:100; max-width:85vw; text-align:center;
+  }
+  .toast.show{ opacity:1; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>⬡ Catan Tracker</h1>
+  <div class="subtitle" id="metaLine">move 0 · new game</div>
+</header>
+
+<div class="players" id="playerTabs"></div>
+
+<div class="board-wrap">
+  <svg id="board" viewBox="0 0 400 400" preserveAspectRatio="xMidYMid meet"></svg>
+</div>
+
+<div class="panel" id="resourcePanel">
+  <h2>Resources — <span id="activePlayerName">P1</span></h2>
+  <div class="counters" id="resourceCounters"></div>
+  <div class="vp-row">
+    <span>Victory Points</span>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <button onclick="adjustVP(-1)" style="all:unset;width:26px;height:26px;background:#f4ecd822;border-radius:6px;text-align:center;line-height:26px;cursor:pointer;">–</button>
+      <span class="val" id="vpVal">0</span>
+      <button onclick="adjustVP(1)" style="all:unset;width:26px;height:26px;background:#f4ecd822;border-radius:6px;text-align:center;line-height:26px;cursor:pointer;">+</button>
+    </div>
+  </div>
+</div>
+
+<div class="panel" id="devPanel">
+  <h2>Dev Cards — <span id="activePlayerName2">P1</span></h2>
+  <div class="counters" id="devCounters"></div>
+</div>
+
+<div class="panel">
+  <h2>Move Log</h2>
+  <div class="log-list" id="logList"><div class="empty-log">No moves yet.</div></div>
+  <div class="bookmarks" id="bookmarks"></div>
+</div>
+
+<div class="actions">
+  <button class="btn-secondary" onclick="exportState()">⬇ Export state.json</button>
+  <button class="btn-secondary" onclick="document.getElementById('importFile').click()">⬆ Import state.json</button>
+  <button class="btn-primary" onclick="randomizeBoard()" style="grid-column:1/-1;">🎲 New random board</button>
+  <button class="btn-danger" onclick="newGame()">Reset everything</button>
+</div>
+<input type="file" id="importFile" accept="application/json">
+
+<div class="popup" id="popup"></div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* ===================== CONFIG ===================== */
+const RESOURCE_TYPES = ['wood','brick','sheep','wheat','ore'];
+const RESOURCE_META = {
+  wood:{icon:'🌲', color:'var(--wood)'},
+  brick:{icon:'🧱', color:'var(--brick)'},
+  sheep:{icon:'🐑', color:'var(--sheep)'},
+  wheat:{icon:'🌾', color:'var(--wheat)'},
+  ore:{icon:'⛰️', color:'var(--ore)'},
+  desert:{icon:'🏜️', color:'var(--desert)'}
+};
+const DEV_TYPES = ['knight','roadBuilding','yearOfPlenty','monopoly','victoryPoint'];
+const DEV_META = {
+  knight:{icon:'⚔️', label:'Knight'},
+  roadBuilding:{icon:'🛤️', label:'Road Bldg'},
+  yearOfPlenty:{icon:'🌽', label:'Yr Plenty'},
+  monopoly:{icon:'💰', label:'Monopoly'},
+  victoryPoint:{icon:'🏆', label:'VP Card'}
+};
+const PLAYER_COLORS = ['#c0392b','#2f6fb0','#d9822b','#e8e2d0'];
+const VIEWERS = ['Claude','P1','P2','P3','P4'];
+const HEX_SIZE = 34;
+
+/* ===================== STATE ===================== */
+let state = null;
+let activePlayer = 0;
+
+function freshState(numPlayers){
+  numPlayers = numPlayers || 3;
+  const players = [];
+  for(let i=0;i<numPlayers;i++){
+    players.push({
+      id:'P'+(i+1),
+      color:PLAYER_COLORS[i],
+      resources:{wood:0,brick:0,sheep:0,wheat:0,ore:0},
+      devCards:{knight:0,roadBuilding:0,yearOfPlenty:0,monopoly:0,victoryPoint:0},
+      vp:0
+    });
+  }
+  const board = generateBoard();
+  return {
+    schemaVersion:1,
+    game:'catan',
+    createdAt:new Date().toISOString(),
+    board,
+    robberHexId: board.hexes.find(h=>h.resource==='desert').id,
+    players,
+    log:[],
+    bookmarks: Object.fromEntries(VIEWERS.map(v=>[v,0])),
+    nextMoveNum:1
+  };
+}
+
+/* ===================== BOARD GEOMETRY ===================== */
+function generateBoard(){
+  // axial coords, radius 2 (19 hexes)
+  const coords = [];
+  for(let q=-2;q<=2;q++){
+    for(let r=-2;r<=2;r++){
+      const s=-q-r;
+      if(Math.max(Math.abs(q),Math.abs(r),Math.abs(s))<=2) coords.push({q,r});
+    }
+  }
+  // resource + number pools
+  const resPool = shuffle(['wood','wood','wood','wood','brick','brick','brick','wheat','wheat','wheat','wheat','sheep','sheep','sheep','sheep','ore','ore','ore','desert']);
+  const numPool = shuffle([2,3,3,4,4,5,5,6,6,8,8,9,9,10,10,11,11,12]);
+  let ni=0;
+  const hexes = coords.map((c,i)=>{
+    const resource = resPool[i];
+    const cx = HEX_SIZE*1.5*c.q;
+    const cy = HEX_SIZE*(Math.sqrt(3)/2*c.q + Math.sqrt(3)*c.r);
+    const number = resource==='desert' ? null : numPool[ni++];
+    return {id:'H'+i, q:c.q, r:c.r, cx, cy, resource, number};
+  });
+
+  // vertices + edges via corner dedup
+  const vmap = new Map(); // "x,y" -> vertex id
+  const vertices = [];
+  const emap = new Map(); // "vidA-vidB" sorted -> edge
+  const edges = [];
+
+  function cornerKey(x,y){ return Math.round(x*10)+','+Math.round(y*10); }
+
+  hexes.forEach(hex=>{
+    const corners = [];
+    for(let i=0;i<6;i++){
+      const ang = Math.PI/180*60*i;
+      const x = hex.cx + HEX_SIZE*Math.cos(ang);
+      const y = hex.cy + HEX_SIZE*Math.sin(ang);
+      const key = cornerKey(x,y);
+      let vid = vmap.get(key);
+      if(vid===undefined){
+        vid = 'V'+vertices.length;
+        vmap.set(key,vid);
+        vertices.push({id:vid, x, y, building:null});
+      }
+      corners.push(vid);
+    }
+    hex.vertexIds = corners;
+    for(let i=0;i<6;i++){
+      const a = corners[i], b = corners[(i+1)%6];
+      const ekey = [a,b].sort().join('-');
+      if(!emap.has(ekey)){
+        const va = vertices.find(v=>v.id===a), vb = vertices.find(v=>v.id===b);
+        const eid = 'E'+edges.length;
+        const edge = {id:eid, a, b, x1:va.x,y1:va.y,x2:vb.x,y2:vb.y, road:null};
+        emap.set(ekey, edge);
+        edges.push(edge);
+      }
+    }
+  });
+
+  // normalize coordinates to positive viewBox space
+  const allX = vertices.map(v=>v.x), allY = vertices.map(v=>v.y);
+  const minX = Math.min(...allX)-HEX_SIZE, minY = Math.min(...allY)-HEX_SIZE;
+  const maxX = Math.max(...allX)+HEX_SIZE, maxY = Math.max(...allY)+HEX_SIZE;
+  const w = maxX-minX, h = maxY-minY;
+  hexes.forEach(hx=>{ hx.cx -= minX; hx.cy -= minY; });
+  vertices.forEach(v=>{ v.x -= minX; v.y -= minY; });
+  edges.forEach(e=>{ e.x1-=minX; e.y1-=minY; e.x2-=minX; e.y2-=minY; });
+
+  return {hexes, vertices, edges, viewBox:{w,h}};
+}
+
+function shuffle(arr){
+  const a = arr.slice();
+  for(let i=a.length-1;i>0;i--){
+    const j = Math.floor(Math.random()*(i+1));
+    [a[i],a[j]]=[a[j],a[i]];
+  }
+  return a;
+}
+
+/* ===================== LOGGING ===================== */
+function pushLog(description, playerId){
+  state.log.push({
+    moveNum: state.nextMoveNum++,
+    player: playerId || null,
+    description,
+    timestamp: new Date().toISOString()
+  });
+  renderLog();
+  renderMeta();
+  autosave();
+}
+
+/* ===================== RENDER: BOARD ===================== */
+function renderBoard(){
+  const svg = document.getElementById('board');
+  const {hexes, vertices, edges, viewBox} = state.board;
+  svg.setAttribute('viewBox', `0 0 ${viewBox.w} ${viewBox.h}`);
+  let html = '';
+
+  // hexes
+  hexes.forEach(hex=>{
+    const pts = [];
+    for(let i=0;i<6;i++){
+      const ang = Math.PI/180*60*i;
+      pts.push((hex.cx+HEX_SIZE*Math.cos(ang)).toFixed(1)+','+(hex.cy+HEX_SIZE*Math.sin(ang)).toFixed(1));
+    }
+    const fill = RESOURCE_META[hex.resource] ? RESOURCE_META[hex.resource].color : '#ccc';
+    html += `<polygon class="hex-fill" points="${pts.join(' ')}" fill="${fill}"></polygon>`;
+    if(hex.number){
+      const isRed = hex.number===6 || hex.number===8;
+      const pipCount = ({2:1,3:2,4:3,5:4,6:5,8:5,9:4,10:3,11:2,12:1})[hex.number];
+      html += `<g class="token" onclick="onHexTap('${hex.id}')">
+        <circle class="token-bg" cx="${hex.cx}" cy="${hex.cy}" r="13"></circle>
+        <text class="token-num ${isRed?'red':''}" x="${hex.cx}" y="${hex.cy+5}" font-size="14" text-anchor="middle">${hex.number}</text>
+      </g>`;
+      const pipY = hex.cy+13;
+      const pipStartX = hex.cx - (pipCount-1)*2.5;
+      for(let p=0;p<pipCount;p++){
+        html += `<circle class="pip" cx="${pipStartX+p*5}" cy="${pipY}" r="1"></circle>`;
+      }
+    } else {
+      html += `<g class="token" onclick="onHexTap('${hex.id}')"><circle class="token-bg" cx="${hex.cx}" cy="${hex.cy}" r="13" opacity="0.5"></circle></g>`;
+    }
+    if(hex.id === state.robberHexId){
+      html += `<g class="robber" onclick="onHexTap('${hex.id}')">
+        <ellipse cx="${hex.cx}" cy="${hex.cy-2}" rx="5" ry="7"></ellipse>
+        <circle cx="${hex.cx}" cy="${hex.cy-9}" r="3.2"></circle>
+      </g>`;
+    }
+  });
+
+  // edges (roads)
+  edges.forEach(e=>{
+    const color = (e.road !== null && e.road !== undefined) ? state.players[e.road]?.color : null;
+    html += `<line class="edge ${e.road!==null?'road':''}" x1="${e.x1}" y1="${e.y1}" x2="${e.x2}" y2="${e.y2}"
+      ${color?`stroke="${color}"`:''} onclick="onEdgeTap(event,'${e.id}')"></line>`;
+  });
+
+  // vertices (settlements/cities)
+  vertices.forEach(v=>{
+    let cls='vertex', extra='', r=5;
+    if(v.building){
+      const col = state.players[v.building.player]?.color || '#000';
+      cls += ' '+v.building.type;
+      r = v.building.type==='city' ? 8 : 6;
+      extra = `fill="${col}"`;
+    }
+    html += `<circle class="${cls}" cx="${v.x}" cy="${v.y}" r="${r}" ${extra} onclick="onVertexTap(event,'${v.id}')"></circle>`;
+  });
+
+  svg.innerHTML = html;
+}
+
+/* ===================== TAP HANDLERS ===================== */
+function showPopup(x,y, items){
+  const pop = document.getElementById('popup');
+  pop.innerHTML = items.map(it=>`<button onclick="${it.action}">${it.label}</button>`).join('')
+    + `<button class="cancel" onclick="hidePopup()">Cancel</button>`;
+  const px = Math.min(x, window.innerWidth-190);
+  const py = Math.min(y, window.innerHeight-items.length*44-60);
+  pop.style.left = px+'px';
+  pop.style.top = py+'px';
+  pop.classList.add('show');
+}
+function hidePopup(){ document.getElementById('popup').classList.remove('show'); }
+
+function onVertexTap(evt, vid){
+  evt.stopPropagation();
+  const v = state.board.vertices.find(x=>x.id===vid);
+  const p = state.players[activePlayer];
+  const items = [];
+  if(!v.building){
+    items.push({label:`Settlement (${p.id})`, action:`placeBuilding('${vid}','settlement')`});
+  } else if(v.building.player===activePlayer && v.building.type==='settlement'){
+    items.push({label:`Upgrade to City (${p.id})`, action:`placeBuilding('${vid}','city')`});
+    items.push({label:'Remove', action:`placeBuilding('${vid}',null)`});
+  } else {
+    items.push({label:'Remove building', action:`placeBuilding('${vid}',null)`});
+  }
+  showPopup(evt.clientX, evt.clientY, items);
+}
+
+function placeBuilding(vid, type){
+  const v = state.board.vertices.find(x=>x.id===vid);
+  const p = state.players[activePlayer];
+  if(type===null){
+    v.building = null;
+    pushLog(`${p.id} removed building at ${vid}`, p.id);
+  } else {
+    v.building = {player:activePlayer, type};
+    pushLog(`${p.id} placed ${type} at ${vid}`, p.id);
+  }
+  hidePopup();
+  renderBoard();
+}
+
+function onEdgeTap(evt, eid){
+  evt.stopPropagation();
+  const e = state.board.edges.find(x=>x.id===eid);
+  const p = state.players[activePlayer];
+  const items = [];
+  if(e.road===null){
+    items.push({label:`Road (${p.id})`, action:`placeRoad('${eid}',${activePlayer})`});
+  } else {
+    items.push({label:'Remove road', action:`placeRoad('${eid}',null)`});
+  }
+  showPopup(evt.clientX, evt.clientY, items);
+}
+function placeRoad(eid, playerIdx){
+  const e = state.board.edges.find(x=>x.id===eid);
+  const p = state.players[activePlayer];
+  e.road = playerIdx;
+  pushLog(playerIdx===null ? `${p.id} removed road at ${eid}` : `${state.players[playerIdx].id} placed road at ${eid}`, p.id);
+  hidePopup();
+  renderBoard();
+}
+
+function onHexTap(hid){
+  const hex = state.board.hexes.find(x=>x.id===hid);
+  const items = [{label:'Move robber here', action:`moveRobber('${hid}')`}];
+  showPopup(window.innerWidth/2-85, window.innerHeight/2-40, items);
+}
+function moveRobber(hid){
+  const hex = state.board.hexes.find(x=>x.id===hid);
+  state.robberHexId = hid;
+  pushLog(`Robber moved to ${hid} (${hex.resource})`);
+  hidePopup();
+  renderBoard();
+}
+
+document.body.addEventListener('click', hidePopup);
+document.getElementById('popup').addEventListener('click', e=>e.stopPropagation());
+
+/* ===================== RENDER: PLAYERS / RESOURCES / DEV ===================== */
+function renderPlayerTabs(){
+  const wrap = document.getElementById('playerTabs');
+  wrap.innerHTML = state.players.map((p,i)=>`
+    <div class="player-tab ${i===activePlayer?'active':''}" onclick="setActivePlayer(${i})">
+      <span class="swatch" style="background:${p.color}"></span>
+      ${p.id} <span class="vp">${p.vp}vp</span>
+    </div>
+  `).join('') + `<div class="player-tab" onclick="addPlayer()" style="opacity:0.7;">+ Add</div>`;
+}
+function setActivePlayer(i){ activePlayer=i; renderAll(); }
+function addPlayer(){
+  if(state.players.length>=4){ showToast('Max 4 players'); return; }
+  const i = state.players.length;
+  state.players.push({
+    id:'P'+(i+1), color:PLAYER_COLORS[i],
+    resources:{wood:0,brick:0,sheep:0,wheat:0,ore:0},
+    devCards:{knight:0,roadBuilding:0,yearOfPlenty:0,monopoly:0,victoryPoint:0}, vp:0
+  });
+  pushLog(`P${i+1} joined the game`);
+  renderAll();
+}
+
+function renderResourceCounters(){
+  const p = state.players[activePlayer];
+  document.getElementById('activePlayerName').textContent = p.id;
+  document.getElementById('activePlayerName2').textContent = p.id;
+  document.getElementById('vpVal').textContent = p.vp;
+  document.getElementById('resourceCounters').innerHTML = RESOURCE_TYPES.map(rt=>`
+    <div class="counter">
+      <div class="icon">${RESOURCE_META[rt].icon}</div>
+      <div class="label">${rt}</div>
+      <div class="val">${p.resources[rt]}</div>
+      <div class="btns">
+        <button onclick="adjustResource('${rt}',-1)">–</button>
+        <button onclick="adjustResource('${rt}',1)">+</button>
+      </div>
+    </div>
+  `).join('');
+  document.getElementById('devCounters').innerHTML = DEV_TYPES.map(dt=>`
+    <div class="counter">
+      <div class="icon">${DEV_META[dt].icon}</div>
+      <div class="label">${DEV_META[dt].label}</div>
+      <div class="val">${p.devCards[dt]}</div>
+      <div class="btns">
+        <button onclick="adjustDev('${dt}',-1)">–</button>
+        <button onclick="adjustDev('${dt}',1)">+</button>
+      </div>
+    </div>
+  `).join('');
+}
+function adjustResource(rt, delta){
+  const p = state.players[activePlayer];
+  p.resources[rt] = Math.max(0, p.resources[rt]+delta);
+  pushLog(`${p.id} ${delta>0?'+':''}${delta} ${rt}`, p.id);
+  renderResourceCounters();
+}
+function adjustDev(dt, delta){
+  const p = state.players[activePlayer];
+  p.devCards[dt] = Math.max(0, p.devCards[dt]+delta);
+  pushLog(`${p.id} ${delta>0?'+':''}${delta} ${DEV_META[dt].label} card`, p.id);
+  renderResourceCounters();
+}
+function adjustVP(delta){
+  const p = state.players[activePlayer];
+  p.vp = Math.max(0, p.vp+delta);
+  pushLog(`${p.id} VP ${delta>0?'+':''}${delta} (now ${p.vp})`, p.id);
+  renderResourceCounters();
+  renderPlayerTabs();
+}
+
+/* ===================== RENDER: LOG + BOOKMARKS ===================== */
+function renderLog(){
+  const list = document.getElementById('logList');
+  if(state.log.length===0){ list.innerHTML = '<div class="empty-log">No moves yet.</div>'; return; }
+  list.innerHTML = state.log.slice(-40).map(e=>
+    `<div class="entry"><span class="mv">#${e.moveNum}</span> ${e.description}</div>`
+  ).reverse().join('');
+}
+function renderBookmarks(){
+  document.getElementById('bookmarks').innerHTML = VIEWERS.map(v=>{
+    const seen = state.bookmarks[v]||0;
+    const unread = state.log.length - seen;
+    return `<button class="bm-btn" onclick="copyDelta('${v}')">
+      ${v} ${unread>0?`<span class="bm-count">${unread}</span>`:''}
+    </button>`;
+  }).join('');
+}
+function copyDelta(viewer){
+  const seen = state.bookmarks[viewer]||0;
+  const newEntries = state.log.filter(e=>e.moveNum>seen);
+  if(newEntries.length===0){ showToast(`Nothing new for ${viewer}`); return; }
+  const text = `Catan update for ${viewer} (moves ${seen+1}\u2013${state.log.length}):\n` +
+    newEntries.map(e=>`#${e.moveNum} ${e.description}`).join('\n') +
+    `\n\nVP: ${state.players.map(p=>`${p.id}=${p.vp}`).join(', ')}`;
+  navigator.clipboard.writeText(text).then(()=>{
+    state.bookmarks[viewer] = state.log[state.log.length-1].moveNum;
+    autosave();
+    renderBookmarks();
+    showToast(`Copied ${newEntries.length} move(s) for ${viewer}`);
+  }).catch(()=>{
+    showToast('Clipboard failed — select text manually');
+  });
+}
+
+/* ===================== META / TOAST ===================== */
+function renderMeta(){
+  document.getElementById('metaLine').textContent = `move ${state.log.length} · ${state.players.length} players`;
+}
+function showToast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(showToast._t);
+  showToast._t = setTimeout(()=>t.classList.remove('show'), 1800);
+}
+
+/* ===================== EXPORT / IMPORT ===================== */
+function exportState(){
+  const blob = new Blob([JSON.stringify(state,null,2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const ts = new Date().toISOString().replace(/[:.]/g,'-');
+  a.href = url;
+  a.download = `catan-state-${ts}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  showToast('Exported state.json');
+}
+document.getElementById('importFile').addEventListener('change', function(e){
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = function(evt){
+    try{
+      const loaded = JSON.parse(evt.target.result);
+      if(loaded.game!=='catan') throw new Error('Not a catan state file');
+      state = loaded;
+      activePlayer = 0;
+      renderAll();
+      showToast('State imported');
+    }catch(err){
+      showToast('Import failed: '+err.message);
+    }
+  };
+  reader.readAsText(file);
+  e.target.value='';
+});
+
+function randomizeBoard(){
+  if(!confirm('Regenerate hex layout? Existing buildings/roads will be cleared.')) return;
+  const numPlayers = state.players.length;
+  const board = generateBoard();
+  state.board = board;
+  state.robberHexId = board.hexes.find(h=>h.resource==='desert').id;
+  pushLog('Board randomized');
+  renderBoard();
+}
+function newGame(){
+  if(!confirm('Reset everything? This cannot be undone (export first if needed).')) return;
+  const n = state ? state.players.length : 3;
+  state = freshState(n);
+  activePlayer = 0;
+  renderAll();
+  showToast('New game started');
+}
+
+/* ===================== AUTOSAVE (localStorage safety net) ===================== */
+function autosave(){
+  try{ localStorage.setItem('catan-tracker-state', JSON.stringify(state)); }catch(e){}
+}
+
+/* ===================== INIT ===================== */
+function renderAll(){
+  renderPlayerTabs();
+  renderBoard();
+  renderResourceCounters();
+  renderLog();
+  renderBookmarks();
+  renderMeta();
+}
+
+(function init(){
+  const saved = localStorage.getItem('catan-tracker-state');
+  if(saved){
+    try{ state = JSON.parse(saved); }catch(e){ state = freshState(3); }
+  } else {
+    state = freshState(3);
+  }
+  renderAll();
+})();
+</script>
+</body>
+</html>
